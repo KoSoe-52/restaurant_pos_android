@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.restaurant.restaurant_mobile"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "30.0.15729638"
+    ndkVersion = "30.0.15729638"  // Installed NDK version
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
