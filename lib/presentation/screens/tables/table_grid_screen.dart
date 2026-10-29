@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/models/table_model.dart';
 import '../../../data/providers/auth_provider.dart';
 import '../../../data/providers/table_provider.dart';
@@ -47,11 +48,17 @@ class _TableGridScreenState extends State<TableGridScreen> {
           children: [
             Text(
               settings.restaurantName,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: AppResponsive.titleMd(context),
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const Text(
+            Text(
               'Select a Table',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+              style: TextStyle(
+                fontSize: AppResponsive.bodySm(context),
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ],
         ),
@@ -65,30 +72,35 @@ class _TableGridScreenState extends State<TableGridScreen> {
       ),
       body: Column(
         children: [
-          _buildLegend(),
-          Expanded(child: _buildContent(tableProvider, settings.currencySymbol)),
+          _buildLegend(context),
+          Expanded(
+            child: _buildContent(context, tableProvider, settings.currencySymbol),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildLegend() {
+  Widget _buildLegend(BuildContext context) {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppResponsive.value(context, phone: 16.0, tablet: 24.0),
+        vertical: 10,
+      ),
       child: Row(
         children: [
-          _legendDot(AppColors.available, 'Available'),
+          _legendDot(context, AppColors.available, 'Available'),
           const SizedBox(width: 16),
-          _legendDot(AppColors.occupied, 'Occupied'),
+          _legendDot(context, AppColors.occupied, 'Occupied'),
           const SizedBox(width: 16),
-          _legendDot(AppColors.reserved, 'Reserved'),
+          _legendDot(context, AppColors.reserved, 'Reserved'),
           const Spacer(),
           Consumer<TableProvider>(
-            builder: (_, p, child) => Text(
+            builder: (_, p, _) => Text(
               '${p.tables.length} tables',
-              style: const TextStyle(
-                fontSize: 12,
+              style: TextStyle(
+                fontSize: AppResponsive.bodySm(context),
                 color: AppColors.textSecondary,
               ),
             ),
@@ -98,7 +110,7 @@ class _TableGridScreenState extends State<TableGridScreen> {
     );
   }
 
-  Widget _legendDot(Color color, String label) {
+  Widget _legendDot(BuildContext context, Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -110,13 +122,20 @@ class _TableGridScreenState extends State<TableGridScreen> {
         const SizedBox(width: 5),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style: TextStyle(
+            fontSize: AppResponsive.bodySm(context),
+            color: AppColors.textSecondary,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildContent(TableProvider provider, String currency) {
+  Widget _buildContent(
+    BuildContext context,
+    TableProvider provider,
+    String currency,
+  ) {
     if (provider.isLoading && provider.tables.isEmpty) {
       return const AppLoading(message: 'Loading tables...');
     }
@@ -136,41 +155,54 @@ class _TableGridScreenState extends State<TableGridScreen> {
     return RefreshIndicator(
       onRefresh: provider.loadTables,
       color: AppColors.primary,
-      child: _buildGroupedTables(provider.tables, currency),
+      child: _buildGroupedTables(context, provider.tables, currency),
     );
   }
 
-  Widget _buildGroupedTables(List<RestaurantTable> tables, String currency) {
-    // Group by location
+  Widget _buildGroupedTables(
+    BuildContext context,
+    List<RestaurantTable> tables,
+    String currency,
+  ) {
     final Map<String, List<RestaurantTable>> grouped = {};
     for (final t in tables) {
-      final loc = t.location ?? 'Main';
-      grouped.putIfAbsent(loc, () => []).add(t);
+      grouped.putIfAbsent(t.location ?? 'Main', () => []).add(t);
     }
-
     final locations = grouped.keys.toList()..sort();
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: EdgeInsets.only(
+        bottom: 24,
+        left: AppResponsive.value(context, phone: 0.0, tablet: 8.0),
+        right: AppResponsive.value(context, phone: 0.0, tablet: 8.0),
+      ),
       itemCount: locations.length,
-      itemBuilder: (_, i) {
-        final loc = locations[i];
-        final locTables = grouped[loc]!;
-        return _buildLocationSection(loc, locTables, currency);
-      },
+      itemBuilder: (_, i) => _buildLocationSection(
+        context,
+        locations[i],
+        grouped[locations[i]]!,
+        currency,
+      ),
     );
   }
 
   Widget _buildLocationSection(
+    BuildContext context,
     String location,
     List<RestaurantTable> tables,
     String currency,
   ) {
+    final spacing = AppResponsive.gridSpacing(context);
+    final extent  = AppResponsive.tableCardExtent(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: EdgeInsets.fromLTRB(
+            AppResponsive.value(context, phone: 16.0, tablet: 20.0),
+            16, 16, 8,
+          ),
           child: Row(
             children: [
               Container(
@@ -184,8 +216,8 @@ class _TableGridScreenState extends State<TableGridScreen> {
               const SizedBox(width: 8),
               Text(
                 location,
-                style: const TextStyle(
-                  fontSize: 14,
+                style: TextStyle(
+                  fontSize: AppResponsive.titleSm(context),
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
@@ -193,8 +225,8 @@ class _TableGridScreenState extends State<TableGridScreen> {
               const SizedBox(width: 8),
               Text(
                 '(${tables.length})',
-                style: const TextStyle(
-                  fontSize: 12,
+                style: TextStyle(
+                  fontSize: AppResponsive.bodyMd(context),
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -204,12 +236,14 @@ class _TableGridScreenState extends State<TableGridScreen> {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 0.85,
+          padding: EdgeInsets.symmetric(
+            horizontal: AppResponsive.value(context, phone: 12.0, tablet: 16.0),
+          ),
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: extent,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            childAspectRatio: 0.9,
           ),
           itemCount: tables.length,
           itemBuilder: (_, i) =>
@@ -220,6 +254,8 @@ class _TableGridScreenState extends State<TableGridScreen> {
   }
 }
 
+// ─── Table Card ──────────────────────────────────────────────────────────────
+
 class _TableCard extends StatelessWidget {
   final RestaurantTable table;
   final String currency;
@@ -229,14 +265,15 @@ class _TableCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = AppTheme.tableStatusColor(table.status);
-    final hasOrder = table.activeOrder != null;
+    final hasOrder    = table.activeOrder != null;
+    final r           = AppResponsive.cardRadius(context);
 
     return GestureDetector(
       onTap: () => _onTap(context),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(r),
           border: Border.all(
             color: statusColor.withValues(alpha: 0.5),
             width: 1.5,
@@ -249,113 +286,115 @@ class _TableCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Status indicator + capacity
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                    ),
+        padding: EdgeInsets.all(
+          AppResponsive.value(context, phone: 8.0, tablet: 12.0),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Status dot + capacity
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.person_outline,
-                        size: 12,
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.person_outline,
+                      size: AppResponsive.value(context, phone: 11.0, tablet: 13.0),
+                      color: AppColors.textSecondary,
+                    ),
+                    Text(
+                      '${table.capacity}',
+                      style: TextStyle(
+                        fontSize: AppResponsive.labelSm(context),
                         color: AppColors.textSecondary,
                       ),
-                      Text(
-                        '${table.capacity}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const Spacer(),
-              // Table icon
-              Center(
-                child: Icon(
-                  Icons.table_restaurant,
-                  size: 32,
-                  color: statusColor.withValues(alpha: 0.7),
+                    ),
+                  ],
                 ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Table icon
+            Center(
+              child: Icon(
+                Icons.table_restaurant,
+                size: AppResponsive.value(context, phone: 28.0, tablet: 34.0),
+                color: statusColor.withValues(alpha: 0.75),
               ),
-              const SizedBox(height: 6),
-              // Table name
-              Center(
-                child: Text(
-                  table.name,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            // Table name
+            Center(
+              child: Text(
+                table.name,
+                style: TextStyle(
+                  fontSize: AppResponsive.titleSm(context),
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
-              // Status or order info
-              Center(
-                child: hasOrder
-                    ? Column(
-                        children: [
-                          Text(
-                            Formatters.currency(
-                              table.activeOrder!.total,
-                              symbol: currency,
-                            ),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: statusColor,
-                            ),
+            ),
+            const SizedBox(height: 3),
+            // Status badge / order info
+            Center(
+              child: hasOrder
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          Formatters.currency(
+                            table.activeOrder!.total,
+                            symbol: currency,
                           ),
-                          Text(
-                            '${table.activeOrder!.itemCount} items',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          table.statusLabel,
                           style: TextStyle(
-                            fontSize: 10,
-                            color: statusColor,
+                            fontSize: AppResponsive.labelSm(context),
                             fontWeight: FontWeight.w600,
+                            color: statusColor,
                           ),
                         ),
+                        Text(
+                          '${table.activeOrder!.itemCount} items',
+                          style: TextStyle(
+                            fontSize: AppResponsive.labelSm(context),
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
                       ),
-              ),
-            ],
-          ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        table.statusLabel,
+                        style: TextStyle(
+                          fontSize: AppResponsive.labelSm(context),
+                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -363,29 +402,29 @@ class _TableCard extends StatelessWidget {
 
   void _onTap(BuildContext context) {
     if (table.activeOrder != null) {
-      // Navigate to order detail or add items
       _showTableOptions(context);
     } else {
-      // Navigate to menu to create new order
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => MenuScreen(table: table),
-        ),
+        MaterialPageRoute(builder: (_) => MenuScreen(table: table)),
       );
     }
   }
 
   void _showTableOptions(BuildContext context) {
-    final order = table.activeOrder!;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _TableOptionsSheet(table: table, order: order),
+      builder: (ctx) => _TableOptionsSheet(
+        table: table,
+        order: table.activeOrder!,
+      ),
     );
   }
 }
+
+// ─── Table Options Sheet ─────────────────────────────────────────────────────
 
 class _TableOptionsSheet extends StatelessWidget {
   final RestaurantTable table;
@@ -395,11 +434,15 @@ class _TableOptionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currency =
-        context.read<AuthProvider>().settings.currencySymbol;
+    final currency = context.read<AuthProvider>().settings.currencySymbol;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.paddingOf(context).bottom + 20,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,7 +508,6 @@ class _TableOptionsSheet extends StatelessWidget {
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
-          // View Order
           _OptionTile(
             icon: Icons.receipt_long_outlined,
             label: 'View Order Details',
@@ -481,7 +523,6 @@ class _TableOptionsSheet extends StatelessWidget {
             },
           ),
           const SizedBox(height: 10),
-          // Add more items
           _OptionTile(
             icon: Icons.add_circle_outline,
             label: 'Add More Items',
@@ -543,7 +584,7 @@ class _OptionTile extends StatelessWidget {
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: AppResponsive.titleSm(context),
                       fontWeight: FontWeight.w600,
                       color: color,
                     ),

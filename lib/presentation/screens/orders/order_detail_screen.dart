@@ -32,6 +32,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   @override
+  void dispose() {
+    // Clear detail state so stale data isn't shown next time this screen opens.
+    context.read<OrderProvider>().clearCurrentOrder();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final orderProv = context.watch<OrderProvider>();
     final currency = context.watch<AuthProvider>().settings.currencySymbol;

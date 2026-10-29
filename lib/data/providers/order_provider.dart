@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+
+import '../../core/errors/exceptions.dart';
 import '../models/order_model.dart';
 import '../services/api_service.dart';
 
@@ -19,6 +21,8 @@ class OrderProvider extends ChangeNotifier {
   String? get error => _error;
   bool get hasMore => _hasMore;
 
+  // ── Private helpers ────────────────────────────────────────────────────
+
   void _setLoading(bool v) {
     _isLoading = v;
     notifyListeners();
@@ -33,6 +37,14 @@ class OrderProvider extends ChangeNotifier {
     _error = v;
     notifyListeners();
   }
+
+  void _updateOrderInList(Order order) {
+    final idx = _orders.indexWhere((o) => o.id == order.id);
+    if (idx >= 0) _orders[idx] = order;
+    notifyListeners();
+  }
+
+  // ── Read operations ────────────────────────────────────────────────────
 
   Future<void> loadOrders({
     String? status,
@@ -62,25 +74,34 @@ class OrderProvider extends ChangeNotifier {
       _hasMore = result.hasNextPage;
       if (_hasMore) _currentPage++;
     } catch (e) {
-      _error = _extractMessage(e);
+      _error = AppException.userMessage(e);
     } finally {
       _setLoading(false);
     }
   }
 
   Future<Order?> loadOrderDetail(int id) async {
+    _currentOrder = null;
     _setLoading(true);
     _error = null;
     try {
       _currentOrder = await ApiService.getOrder(id);
-      _setLoading(false);
       return _currentOrder;
     } catch (e) {
-      _error = _extractMessage(e);
-      _setLoading(false);
+      _error = AppException.userMessage(e);
       return null;
+    } finally {
+      _setLoading(false);
     }
   }
+
+  void clearCurrentOrder() {
+    _currentOrder = null;
+    _error = null;
+    notifyListeners();
+  }
+
+  // ── Write operations ───────────────────────────────────────────────────
 
   Future<Order?> createOrder({
     int? tableId,
@@ -100,19 +121,18 @@ class OrderProvider extends ChangeNotifier {
         items: items,
       );
       _currentOrder = order;
-      // Add/update in orders list
       final idx = _orders.indexWhere((o) => o.id == order.id);
       if (idx >= 0) {
         _orders[idx] = order;
       } else {
         _orders.insert(0, order);
       }
-      _setSubmitting(false);
       return order;
     } catch (e) {
-      _error = _extractMessage(e);
-      _setSubmitting(false);
+      _error = AppException.userMessage(e);
       return null;
+    } finally {
+      _setSubmitting(false);
     }
   }
 
@@ -126,12 +146,12 @@ class OrderProvider extends ChangeNotifier {
       final order = await ApiService.addItems(orderId, items);
       _currentOrder = order;
       _updateOrderInList(order);
-      _setSubmitting(false);
       return order;
     } catch (e) {
-      _error = _extractMessage(e);
-      _setSubmitting(false);
+      _error = AppException.userMessage(e);
       return null;
+    } finally {
+      _setSubmitting(false);
     }
   }
 
@@ -142,12 +162,12 @@ class OrderProvider extends ChangeNotifier {
       final order = await ApiService.serveOrder(orderId);
       _currentOrder = order;
       _updateOrderInList(order);
-      _setSubmitting(false);
       return true;
     } catch (e) {
-      _error = _extractMessage(e);
-      _setSubmitting(false);
+      _error = AppException.userMessage(e);
       return false;
+    } finally {
+      _setSubmitting(false);
     }
   }
 
@@ -156,17 +176,14 @@ class OrderProvider extends ChangeNotifier {
     _error = null;
     try {
       await ApiService.voidOrder(orderId, reason);
-      // Remove from list
       _orders.removeWhere((o) => o.id == orderId);
-      if (_currentOrder?.id == orderId) {
-        _currentOrder = null;
-      }
-      _setSubmitting(false);
+      if (_currentOrder?.id == orderId) _currentOrder = null;
       return true;
     } catch (e) {
-      _error = _extractMessage(e);
-      _setSubmitting(false);
+      _error = AppException.userMessage(e);
       return false;
+    } finally {
+      _setSubmitting(false);
     }
   }
 
@@ -177,12 +194,12 @@ class OrderProvider extends ChangeNotifier {
       final order = await ApiService.voidItem(orderId, itemId, reason);
       _currentOrder = order;
       _updateOrderInList(order);
-      _setSubmitting(false);
       return order;
     } catch (e) {
-      _error = _extractMessage(e);
-      _setSubmitting(false);
+      _error = AppException.userMessage(e);
       return null;
+    } finally {
+      _setSubmitting(false);
     }
   }
 
@@ -190,30 +207,12 @@ class OrderProvider extends ChangeNotifier {
     try {
       await ApiService.retryPrintJob(jobId);
       return true;
-    } catch (_) {
+    } catch (e) {
+      _error = AppException.userMessage(e);
+      notifyListeners();
       return false;
     }
   }
 
-  void _updateOrderInList(Order order) {
-    final idx = _orders.indexWhere((o) => o.id == order.id);
-    if (idx >= 0) {
-      _orders[idx] = order;
-    }
-    notifyListeners();
-  }
-
   void clearError() => _setError(null);
-
-  String _extractMessage(dynamic e) {
-    final s = e.toString();
-    if (s.contains('NetworkException')) return 'No internet connection.';
-    if (s.contains('UnauthorizedException')) return 'Session expired.';
-    return s
-        .replaceAll('Exception: ', '')
-        .replaceAll('ApiException(', '')
-        .split('):')
-        .last
-        .trim();
-  }
 }

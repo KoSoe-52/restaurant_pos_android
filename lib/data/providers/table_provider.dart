@@ -1,8 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../../core/constants/app_constants.dart';
+import '../../core/errors/exceptions.dart';
 import '../models/table_model.dart';
 import '../services/api_service.dart';
-import '../../core/constants/app_constants.dart';
 
 class TableProvider extends ChangeNotifier {
   List<RestaurantTable> _tables = [];
@@ -21,30 +24,32 @@ class TableProvider extends ChangeNotifier {
   List<RestaurantTable> get reservedTables =>
       _tables.where((t) => t.isReserved).toList();
 
+  // ── Data loading ───────────────────────────────────────────────────────
+
   Future<void> loadTables() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
       _tables = await ApiService.getTables();
-      _error = null;
     } catch (e) {
-      _error = _extractMessage(e);
+      _error = AppException.userMessage(e);
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
+  /// Silent background refresh — keeps existing data on failure.
   Future<void> refreshTables() async {
     try {
       _tables = await ApiService.getTables();
       _error = null;
       notifyListeners();
-    } catch (e) {
-      // Silent refresh failure — keep existing data
-    }
+    } catch (_) {}
   }
+
+  // ── Auto-refresh ───────────────────────────────────────────────────────
 
   void startAutoRefresh() {
     _refreshTimer?.cancel();
@@ -59,20 +64,14 @@ class TableProvider extends ChangeNotifier {
     _refreshTimer = null;
   }
 
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     stopAutoRefresh();
     super.dispose();
-  }
-
-  String _extractMessage(dynamic e) {
-    final s = e.toString();
-    if (s.contains('NetworkException')) {
-      return 'No internet connection. Check your network.';
-    }
-    if (s.contains('UnauthorizedException')) {
-      return 'Session expired. Please login again.';
-    }
-    return s.replaceAll('Exception: ', '').replaceAll('ApiException(', '').split('):').last.trim();
   }
 }

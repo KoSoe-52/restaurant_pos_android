@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/models/order_model.dart';
 import '../../../data/providers/auth_provider.dart';
 import '../../../data/providers/order_provider.dart';
@@ -161,9 +162,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
     return RefreshIndicator(
       onRefresh: () async => _loadOrders(refresh: true),
       color: AppColors.primary,
-      child: ListView.builder(
-        controller: _scrollCtrl,
-        padding: const EdgeInsets.all(12),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: AppResponsive.contentMaxWidth(context),
+          ),
+          child: ListView.builder(
+            controller: _scrollCtrl,
+            padding: EdgeInsets.all(
+              AppResponsive.value(context, phone: 12.0, tablet: 20.0),
+            ),
         itemCount: provider.orders.length + (provider.hasMore ? 1 : 0),
         itemBuilder: (_, i) {
           if (i == provider.orders.length) {
@@ -183,6 +191,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen>
             onTap: () => _openDetail(provider.orders[i]),
           );
         },
+          ),
+        ),
       ),
     );
   }
@@ -287,7 +297,7 @@ class _OrderCard extends StatelessWidget {
                 children: [
                   _InfoChip(
                     icon: Icons.fastfood_outlined,
-                    label: '${order.activeItems.length} items',
+                    label: '${order.displayItemCount} items',
                   ),
                   const SizedBox(width: 10),
                   _InfoChip(

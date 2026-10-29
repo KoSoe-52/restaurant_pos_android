@@ -1,6 +1,6 @@
 class AppConstants {
   // API Base URL - change this to your server IP/domain
-  static const String baseUrl = 'http://192.168.1.100:8000/api/v1';
+  static const String baseUrl = 'http://127.0.0.1:8000/api/v1';
 
   // Storage keys
   static const String tokenKey = 'api_token';

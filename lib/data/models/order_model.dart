@@ -111,6 +111,7 @@ class Order {
   final String? customerPhone;
   final String? note;
   final List<OrderItem> items;
+  final int? itemCount;
   final double subtotal;
   final double discount;
   final double tax;
@@ -133,6 +134,10 @@ class Order {
   List<OrderItem> get activeItems =>
       items.where((i) => !i.isVoided).toList();
 
+  /// Item count from the list API (when `items` isn't eager-loaded),
+  /// otherwise derived from loaded items.
+  int get displayItemCount => itemCount ?? activeItems.length;
+
   bool get hasFailedPrintJobs => printJobs.any((j) => j.hasFailed);
 
   const Order({
@@ -146,6 +151,7 @@ class Order {
     this.customerPhone,
     this.note,
     required this.items,
+    this.itemCount,
     required this.subtotal,
     required this.discount,
     required this.tax,
@@ -176,6 +182,7 @@ class Order {
       items: (o['items'] as List? ?? [])
           .map((e) => OrderItem.fromJson(e))
           .toList(),
+      itemCount: o['item_count'] as int?,
       subtotal: (o['subtotal'] as num).toDouble(),
       discount: (o['discount'] as num? ?? 0).toDouble(),
       tax: (o['tax'] as num? ?? 0).toDouble(),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/providers/auth_provider.dart';
+import '../home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,9 +13,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  final _formKey       = GlobalKey<FormState>();
+  final _emailCtrl     = TextEditingController();
+  final _passwordCtrl  = TextEditingController();
   bool _obscurePassword = true;
 
   @override
@@ -28,12 +30,18 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusScope.of(context).unfocus();
 
     final auth = context.read<AuthProvider>();
-    final ok = await auth.login(
+    final ok   = await auth.login(
       _emailCtrl.text.trim(),
       _passwordCtrl.text,
     );
 
-    if (!ok && mounted) {
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(auth.errorMessage ?? 'Login failed'),
@@ -46,37 +54,48 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<AuthProvider>().isLoading;
-    final size = MediaQuery.of(context).size;
+    final isLoading  = context.watch<AuthProvider>().isLoading;
+    final isTablet   = AppResponsive.isTablet(context);
+    final screenH    = MediaQuery.sizeOf(context).height;
+    final safePad    = MediaQuery.paddingOf(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: size.height - MediaQuery.of(context).padding.top),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 60),
-                  // Logo / Branding
-                  _buildBranding(),
-                  const SizedBox(height: 48),
-                  // Login card
-                  _buildLoginCard(isLoading),
-                  const SizedBox(height: 32),
-                  // Footer
-                  Text(
-                    'For waiter accounts only',
-                    style: TextStyle(
-                      color: AppColors.textSecondary.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
+            constraints: BoxConstraints(
+              minHeight: screenH - safePad.top - safePad.bottom,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                // on tablet, cap card width so it doesn't stretch edge-to-edge
+                constraints: BoxConstraints(
+                  maxWidth: isTablet ? 480 : double.infinity,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isTablet ? 0 : 28,
+                    vertical: 40,
                   ),
-                  const SizedBox(height: 40),
-                ],
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildBranding(context),
+                      SizedBox(height: isTablet ? 56 : 48),
+                      _buildLoginCard(context, isLoading),
+                      const SizedBox(height: 32),
+                      Text(
+                        'For waiter accounts only',
+                        style: TextStyle(
+                          color: AppColors.textSecondary.withValues(alpha: 0.7),
+                          fontSize: AppResponsive.bodySm(context),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -85,15 +104,18 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildBranding() {
+  Widget _buildBranding(BuildContext context) {
+    final iconSize   = AppResponsive.value(context, phone: 90.0, tablet: 110.0);
+    final iconInner  = AppResponsive.value(context, phone: 46.0, tablet: 56.0);
+
     return Column(
       children: [
         Container(
-          width: 90,
-          height: 90,
+          width: iconSize,
+          height: iconSize,
           decoration: BoxDecoration(
             color: AppColors.primary,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(iconSize * 0.24),
             boxShadow: [
               BoxShadow(
                 color: AppColors.primary.withValues(alpha: 0.35),
@@ -102,27 +124,27 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
-          child: const Icon(
+          child: Icon(
             Icons.restaurant_menu,
             color: Colors.white,
-            size: 46,
+            size: iconInner,
           ),
         ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           'Waiter App',
           style: TextStyle(
-            fontSize: 28,
+            fontSize: AppResponsive.value(context, phone: 28.0, tablet: 34.0),
             fontWeight: FontWeight.w800,
             color: AppColors.textPrimary,
             letterSpacing: 0.3,
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Restaurant POS',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: AppResponsive.value(context, phone: 14.0, tablet: 16.0),
             color: AppColors.textSecondary,
             letterSpacing: 1.2,
           ),
@@ -131,9 +153,11 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildLoginCard(bool isLoading) {
+  Widget _buildLoginCard(BuildContext context, bool isLoading) {
+    final pad = AppResponsive.value(context, phone: 28.0, tablet: 36.0);
+
     return Container(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(pad),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -150,21 +174,23 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Sign In',
               style: TextStyle(
-                fontSize: 22,
+                fontSize: AppResponsive.value(context, phone: 22.0, tablet: 26.0),
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Enter your credentials to continue',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: AppResponsive.bodyMd(context),
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 28),
-            // Email field
             TextFormField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
@@ -182,7 +208,6 @@ class _LoginScreenState extends State<LoginScreen> {
               },
             ),
             const SizedBox(height: 16),
-            // Password field
             TextFormField(
               controller: _passwordCtrl,
               obscureText: _obscurePassword,
@@ -194,10 +219,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 prefixIcon: const Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
                     color: AppColors.textSecondary,
                   ),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
               ),
               validator: (v) {
@@ -206,10 +234,9 @@ class _LoginScreenState extends State<LoginScreen> {
               },
             ),
             const SizedBox(height: 28),
-            // Login button
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: AppResponsive.value(context, phone: 52.0, tablet: 56.0),
               child: ElevatedButton(
                 onPressed: isLoading ? null : _submit,
                 child: isLoading
@@ -221,9 +248,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text(
+                    : Text(
                         'Sign In',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: AppResponsive.value(
+                            context,
+                            phone: 16.0,
+                            tablet: 18.0,
+                          ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
               ),
             ),

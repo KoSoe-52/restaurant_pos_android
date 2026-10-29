@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/models/table_model.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/providers/auth_provider.dart';
@@ -33,9 +34,13 @@ class _MenuScreenState extends State<MenuScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final menu = context.read<MenuProvider>();
+      menu.resetFilters();
       menu.clearCart();
       menu.loadCategories();
       menu.loadProducts();
+      // Sync the text controller with the provider reset so the search box
+      // visually clears when re-entering the screen.
+      _searchCtrl.clear();
     });
   }
 
@@ -47,40 +52,52 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final menu = context.watch<MenuProvider>();
+    final menu     = context.watch<MenuProvider>();
     final settings = context.watch<AuthProvider>().settings;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: _buildAppBar(menu, settings.currencySymbol),
+      appBar: _buildAppBar(context, menu, settings.currencySymbol),
       body: Column(
         children: [
-          _buildSearchBar(menu),
-          _buildCategoryChips(menu),
+          _buildSearchBar(context, menu),
+          _buildCategoryChips(context, menu),
           const Divider(height: 1),
-          Expanded(child: _buildProductGrid(menu, settings.currencySymbol)),
+          Expanded(
+            child: _buildProductGrid(context, menu, settings.currencySymbol),
+          ),
         ],
       ),
       bottomNavigationBar: menu.hasCartItems
-          ? _buildCartBar(menu, settings.currencySymbol)
+          ? _buildCartBar(context, menu, settings.currencySymbol)
           : null,
     );
   }
 
-  AppBar _buildAppBar(MenuProvider menu, String currency) {
+  AppBar _buildAppBar(
+    BuildContext context,
+    MenuProvider menu,
+    String currency,
+  ) {
     return AppBar(
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             widget.table.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: AppResponsive.titleMd(context),
+              fontWeight: FontWeight.w700,
+            ),
           ),
           Text(
             widget.existingOrderId != null
                 ? 'Add to existing order'
                 : 'New order',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+            style: TextStyle(
+              fontSize: AppResponsive.bodySm(context),
+              fontWeight: FontWeight.w400,
+            ),
           ),
         ],
       ),
@@ -120,18 +137,17 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildSearchBar(MenuProvider menu) {
+  Widget _buildSearchBar(BuildContext context, MenuProvider menu) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      padding: EdgeInsets.fromLTRB(
+        AppResponsive.value(context, phone: 12.0, tablet: 16.0),
+        12,
+        AppResponsive.value(context, phone: 12.0, tablet: 16.0),
+        8,
+      ),
       child: TextField(
         controller: _searchCtrl,
-        onChanged: (v) {
-          if (v.isEmpty) {
-            menu.clearSearch();
-          } else {
-            menu.setSearch(v);
-          }
-        },
+        onChanged: (v) => v.isEmpty ? menu.clearSearch() : menu.setSearch(v),
         decoration: InputDecoration(
           hintText: 'Search menu...',
           prefixIcon: const Icon(Icons.search, size: 20),
@@ -152,10 +168,10 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildCategoryChips(MenuProvider menu) {
+  Widget _buildCategoryChips(BuildContext context, MenuProvider menu) {
     if (menu.isLoadingCategories) {
       return const SizedBox(
-        height: 44,
+        height: 48,
         child: Center(
           child: SizedBox(
             width: 20,
@@ -166,16 +182,19 @@ class _MenuScreenState extends State<MenuScreen> {
       );
     }
 
-    final cats = [null, ...menu.categories.map((c) => c)];
+    final cats = [null, ...menu.categories];
 
     return SizedBox(
-      height: 44,
+      height: AppResponsive.value(context, phone: 44.0, tablet: 52.0),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppResponsive.value(context, phone: 12.0, tablet: 16.0),
+          vertical: AppResponsive.value(context, phone: 4.0, tablet: 6.0),
+        ),
         itemCount: cats.length,
         itemBuilder: (_, i) {
-          final cat = cats[i];
+          final cat        = cats[i];
           final isSelected = cat == null
               ? menu.selectedCategoryId == null
               : menu.selectedCategoryId == cat.id;
@@ -190,9 +209,8 @@ class _MenuScreenState extends State<MenuScreen> {
               checkmarkColor: Colors.white,
               labelStyle: TextStyle(
                 color: isSelected ? Colors.white : AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight:
-                    isSelected ? FontWeight.w600 : FontWeight.w400,
+                fontSize: AppResponsive.bodyMd(context),
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
               backgroundColor: Colors.white,
               side: BorderSide(
@@ -200,8 +218,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     ? AppColors.primary
                     : Colors.grey.shade300,
               ),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             ),
           );
         },
@@ -209,7 +226,11 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildProductGrid(MenuProvider menu, String currency) {
+  Widget _buildProductGrid(
+    BuildContext context,
+    MenuProvider menu,
+    String currency,
+  ) {
     if (menu.isLoadingProducts && menu.products.isEmpty) {
       return const ShimmerGrid(count: 8, crossAxisCount: 3);
     }
@@ -219,35 +240,71 @@ class _MenuScreenState extends State<MenuScreen> {
         onRetry: () => menu.loadProducts(refresh: true),
       );
     }
-    if (menu.products.isEmpty) {
-      return const AppEmpty(
-        message: 'No products found',
-        icon: Icons.fastfood_outlined,
-      );
-    }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.72,
-      ),
-      itemCount: menu.products.length,
-      itemBuilder: (_, i) => _ProductCard(
-        product: menu.products[i],
-        currency: currency,
-        quantity: menu.getQuantityInCart(menu.products[i].id),
-        onAdd: () => menu.addToCart(menu.products[i]),
-        onRemove: () => menu.removeFromCart(menu.products[i].id),
-      ),
+    final spacing = AppResponsive.gridSpacing(context);
+    final extent  = AppResponsive.productCardExtent(context);
+    final hPad    = AppResponsive.value(context, phone: 12.0, tablet: 16.0);
+
+    return Stack(
+      children: [
+        if (menu.products.isEmpty && !menu.isLoadingProducts)
+          const AppEmpty(
+            message: 'No products found',
+            icon: Icons.fastfood_outlined,
+          )
+        else
+          GridView.builder(
+            padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 100),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: extent,
+              crossAxisSpacing: spacing,
+              mainAxisSpacing: spacing,
+              // Fixed row height — image (w/1.2) + name(2 lines) + price +
+              // button fits within this on every density/width.
+              mainAxisExtent: AppResponsive.value(
+                context,
+                phone: 208.0,
+                tablet: 235.0,
+              ),
+            ),
+            itemCount: menu.products.length,
+            itemBuilder: (_, i) => _ProductCard(
+              product: menu.products[i],
+              currency: currency,
+              quantity: menu.getQuantityInCart(menu.products[i].id),
+              onAdd: () => menu.addToCart(menu.products[i]),
+              onRemove: () => menu.removeFromCart(menu.products[i].id),
+            ),
+          ),
+        // Loading overlay when switching category / search
+        if (menu.isLoadingProducts)
+          Positioned.fill(
+            child: Container(
+              color: Colors.white.withValues(alpha: 0.7),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _buildCartBar(MenuProvider menu, String currency) {
+  Widget _buildCartBar(
+    BuildContext context,
+    MenuProvider menu,
+    String currency,
+  ) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        12,
+        16,
+        MediaQuery.paddingOf(context).bottom + 12,
+      ),
       decoration: BoxDecoration(
         color: AppColors.cartBackground,
         boxShadow: [
@@ -258,68 +315,62 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${menu.cartItemCount} items',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(20),
             ),
-            const Spacer(),
-            Text(
-              Formatters.currency(menu.cartTotal, symbol: currency),
-              style: const TextStyle(
+            child: Text(
+              '${menu.cartItemCount} items',
+              style: TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                fontSize: AppResponsive.bodyMd(context),
               ),
             ),
-            const SizedBox(width: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.cartBackground,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          ),
+          const Spacer(),
+          Text(
+            Formatters.currency(menu.cartTotal, symbol: currency),
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: AppResponsive.value(context, phone: 18.0, tablet: 20.0),
+            ),
+          ),
+          const SizedBox(width: 16),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.cartBackground,
+              padding: EdgeInsets.symmetric(
+                horizontal: AppResponsive.value(context, phone: 20.0, tablet: 28.0),
+                vertical: 12,
               ),
-              onPressed: () => _openCart(context, menu, currency),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'View Cart',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () => _openCart(context, menu, currency),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'View Cart',
+                  style: TextStyle(
+                    fontSize: AppResponsive.bodyMd(context),
+                    fontWeight: FontWeight.w700,
                   ),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_forward, size: 16),
-                ],
-              ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_forward, size: 16),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -335,6 +386,8 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 }
+
+// ─── Product Card ─────────────────────────────────────────────────────────────
 
 class _ProductCard extends StatelessWidget {
   final Product product;
@@ -354,13 +407,14 @@ class _ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inCart = quantity > 0;
+    final r      = AppResponsive.cardRadius(context);
 
     return GestureDetector(
       onTap: onAdd,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(r),
           border: Border.all(
             color: inCart
                 ? AppColors.primary.withValues(alpha: 0.5)
@@ -380,77 +434,104 @@ class _ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product image
+            // Product image — fixed fraction of card height via AspectRatio
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(r)),
               child: AspectRatio(
-                aspectRatio: 1.1,
+                aspectRatio: 1.2,
                 child: product.imageUrl != null
                     ? CachedNetworkImage(
                         imageUrl: product.imageUrl!,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
+                        placeholder: (_, _) => Container(
                           color: Colors.grey.shade100,
                           child: const Icon(
                             Icons.fastfood,
                             color: AppColors.textHint,
                           ),
                         ),
-                        errorWidget: (context, url, error) =>
-                            _placeholderImage(product.printerTarget),
+                        errorWidget: (_, _, _) =>
+                            _placeholder(product.printerTarget),
                       )
-                    : _placeholderImage(product.printerTarget),
+                    : _placeholder(product.printerTarget),
               ),
             ),
+            // Info area — no Spacer; use MainAxisAlignment.spaceBetween
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                padding: EdgeInsets.fromLTRB(
+                  AppResponsive.value(context, phone: 7.0, tablet: 10.0),
+                  AppResponsive.value(context, phone: 5.0, tablet: 7.0),
+                  AppResponsive.value(context, phone: 7.0, tablet: 10.0),
+                  AppResponsive.value(context, phone: 5.0, tablet: 7.0),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       product.name,
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: TextStyle(
+                        fontSize: AppResponsive.bodySm(context),
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
+                        height: 1.2,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const Spacer(),
-                    Text(
-                      Formatters.currency(product.sellPrice, symbol: currency),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: inCart ? AppColors.primary : AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    // Quantity controls
-                    if (inCart)
-                      _QuantityControl(
-                        quantity: quantity,
-                        onAdd: onAdd,
-                        onRemove: onRemove,
-                      )
-                    else
-                      SizedBox(
-                        width: double.infinity,
-                        height: 26,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          Formatters.currency(
+                            product.sellPrice,
+                            symbol: currency,
+                          ),
+                          style: TextStyle(
+                            fontSize: AppResponsive.bodySm(context),
+                            fontWeight: FontWeight.w700,
+                            color: inCart
+                                ? AppColors.primary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        if (inCart)
+                          _QuantityControl(
+                            quantity: quantity,
+                            onAdd: onAdd,
+                            onRemove: onRemove,
+                          )
+                        else
+                          SizedBox(
+                            width: double.infinity,
+                            height: AppResponsive.value(
+                              context,
+                              phone: 24.0,
+                              tablet: 28.0,
+                            ),
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                              onPressed: onAdd,
+                              child: Icon(
+                                Icons.add,
+                                size: AppResponsive.value(
+                                  context,
+                                  phone: 16.0,
+                                  tablet: 18.0,
+                                ),
+                              ),
                             ),
                           ),
-                          onPressed: onAdd,
-                          child: const Icon(Icons.add, size: 18),
-                        ),
-                      ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -461,21 +542,16 @@ class _ProductCard extends StatelessWidget {
     );
   }
 
-  Widget _placeholderImage(String printerTarget) {
-    IconData icon;
-    Color color;
+  Widget _placeholder(String printerTarget) {
+    final IconData icon;
+    final Color color;
     switch (printerTarget) {
       case 'beer':
-        icon = Icons.sports_bar;
-        color = Colors.amber.shade300;
-        break;
+        icon = Icons.sports_bar; color = Colors.amber.shade300;
       case 'kitchen':
-        icon = Icons.restaurant;
-        color = Colors.orange.shade200;
-        break;
+        icon = Icons.restaurant; color = Colors.orange.shade200;
       default:
-        icon = Icons.fastfood;
-        color = Colors.grey.shade200;
+        icon = Icons.fastfood; color = Colors.grey.shade200;
     }
     return Container(
       color: color.withValues(alpha: 0.3),
@@ -497,29 +573,27 @@ class _QuantityControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final btnSize = AppResponsive.value(context, phone: 24.0, tablet: 28.0);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         GestureDetector(
           onTap: onRemove,
           child: Container(
-            width: 24,
-            height: 24,
+            width: btnSize,
+            height: btnSize,
             decoration: BoxDecoration(
               color: AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Icon(
-              Icons.remove,
-              size: 14,
-              color: AppColors.primary,
-            ),
+            child: Icon(Icons.remove, size: 14, color: AppColors.primary),
           ),
         ),
         Text(
           '$quantity',
-          style: const TextStyle(
-            fontSize: 14,
+          style: TextStyle(
+            fontSize: AppResponsive.bodyMd(context),
             fontWeight: FontWeight.w700,
             color: AppColors.primary,
           ),
@@ -527,17 +601,13 @@ class _QuantityControl extends StatelessWidget {
         GestureDetector(
           onTap: onAdd,
           child: Container(
-            width: 24,
-            height: 24,
+            width: btnSize,
+            height: btnSize,
             decoration: BoxDecoration(
               color: AppColors.primary,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Icon(
-              Icons.add,
-              size: 14,
-              color: Colors.white,
-            ),
+            child: const Icon(Icons.add, size: 14, color: Colors.white),
           ),
         ),
       ],

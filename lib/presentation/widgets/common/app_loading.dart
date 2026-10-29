@@ -15,7 +15,10 @@ class AppLoading extends StatelessWidget {
           const CircularProgressIndicator(color: AppColors.primary),
           if (message != null) ...[
             const SizedBox(height: 16),
-            Text(message!, style: const TextStyle(color: AppColors.textSecondary)),
+            Text(
+              message!,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
           ],
         ],
       ),
@@ -31,25 +34,70 @@ class AppError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isNetwork = message.toLowerCase().contains('internet') ||
+        message.toLowerCase().contains('connection') ||
+        message.toLowerCase().contains('timed out');
+    final isAuth = message.toLowerCase().contains('session') ||
+        message.toLowerCase().contains('login');
+
+    final IconData icon;
+    final Color iconColor;
+    if (isNetwork) {
+      icon = Icons.wifi_off_rounded;
+      iconColor = AppColors.warning;
+    } else if (isAuth) {
+      icon = Icons.lock_outline_rounded;
+      iconColor = AppColors.info;
+    } else {
+      icon = Icons.error_outline_rounded;
+      iconColor = AppColors.error;
+    }
+
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 56, color: AppColors.error),
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 36, color: iconColor),
+            ),
             const SizedBox(height: 16),
+            Text(
+              isNetwork
+                  ? 'No Connection'
+                  : isAuth
+                      ? 'Session Expired'
+                      : 'Something went wrong',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 15),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Try Again'),
               ),
             ],
           ],
@@ -98,7 +146,10 @@ class AppEmpty extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 subtitle!,
-                style: const TextStyle(color: AppColors.textHint, fontSize: 13),
+                style: const TextStyle(
+                  color: AppColors.textHint,
+                  fontSize: 13,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -145,30 +196,38 @@ class ShimmerCard extends StatelessWidget {
   }
 }
 
+/// Shimmer placeholder grid that matches the product grid's fixed row height.
 class ShimmerGrid extends StatelessWidget {
   final int count;
   final int crossAxisCount;
-  final double childAspectRatio;
 
   const ShimmerGrid({
     super.key,
     this.count = 6,
-    this.crossAxisCount = 2,
-    this.childAspectRatio = 1.0,
+    this.crossAxisCount = 3,
   });
 
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: childAspectRatio,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        mainAxisExtent: 208,
       ),
       itemCount: count,
-      itemBuilder: (context, _) => const ShimmerCard(),
+      itemBuilder: (_, _) => Shimmer.fromColors(
+        baseColor: Colors.grey.shade200,
+        highlightColor: Colors.grey.shade100,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
     );
   }
 }

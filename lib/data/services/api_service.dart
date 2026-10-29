@@ -1,23 +1,28 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:http/http.dart' as http;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/exceptions.dart';
-import '../models/user_model.dart';
-import '../models/table_model.dart';
 import '../models/category_model.dart';
+import '../models/order_model.dart';
 import '../models/product_model.dart';
 import '../models/settings_model.dart';
-import '../models/order_model.dart';
+import '../models/table_model.dart';
+import '../models/user_model.dart';
 
 class ApiService {
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
-  // ─── Token management ────────────────────────────────────────────────
+  static final _client = http.Client();
+
+  // ── Token management ────────────────────────────────────────────────────
 
   static Future<String?> getToken() => _storage.read(key: AppConstants.tokenKey);
 
@@ -27,23 +32,21 @@ class ApiService {
   static Future<void> clearToken() =>
       _storage.delete(key: AppConstants.tokenKey);
 
-  // ─── HTTP Headers ────────────────────────────────────────────────────
+  // ── HTTP headers ────────────────────────────────────────────────────────
 
   static Future<Map<String, String>> _headers({bool auth = true}) async {
-    final headers = {
+    final h = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
     if (auth) {
       final token = await getToken();
-      if (token != null) {
-        headers['Authorization'] = 'Bearer $token';
-      }
+      if (token != null) h['Authorization'] = 'Bearer $token';
     }
-    return headers;
+    return h;
   }
 
-  // ─── Response handler ────────────────────────────────────────────────
+  // ── Response handler ────────────────────────────────────────────────────
 
   static dynamic _handleResponse(http.Response response) {
     dynamic body;
@@ -53,110 +56,97 @@ class ApiService {
       throw ApiException('Invalid server response', response.statusCode);
     }
 
+    final msg = body is Map ? body['message'] as String? : null;
+
     switch (response.statusCode) {
       case 200:
       case 201:
+      case 204:
         return body;
       case 401:
         throw const UnauthorizedException();
       case 403:
-        throw ForbiddenException(
-            (body is Map ? body['message'] : null) ?? 'Access denied');
+        throw ForbiddenException(msg ?? 'Access denied');
       case 404:
-        throw NotFoundException(
-            (body is Map ? body['message'] : null) ?? 'Not found');
+        throw NotFoundException(msg ?? 'Not found');
       case 422:
         final errors = <String, List<String>>{};
         if (body is Map && body['errors'] != null) {
-          (body['errors'] as Map).forEach((key, value) {
-            errors[key.toString()] = List<String>.from(value);
+          (body['errors'] as Map).forEach((k, v) {
+            errors[k.toString()] = List<String>.from(v as Iterable);
           });
         }
-        throw ValidationException(
-          (body is Map ? body['message'] : null) ?? 'Validation failed',
-          errors,
-        );
-      case 500:
+        throw ValidationException(msg ?? 'Validation failed', errors);
       default:
-        throw ApiException(
-          (body is Map ? body['message'] : null) ?? 'Server error',
-          response.statusCode,
-        );
+        throw ApiException(msg ?? 'Server error (${response.statusCode})', response.statusCode);
     }
   }
 
-  // ─── Base HTTP methods ────────────────────────────────────────────────
+  // ── Base transport ──────────────────────────────────────────────────────
 
-  static Future<dynamic> get(String path) async {
+  static Future<dynamic> _send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    bool auth = true,
+  }) async {
+    final url = '${AppConstants.baseUrl}$path';
+    final sw = Stopwatch()..start();
+    debugPrint('[API] → $method $url');
     try {
-      final response = await http
-          .get(
-            Uri.parse('${AppConstants.baseUrl}$path'),
-            headers: await _headers(),
-          )
+      final request = http.Request(method, Uri.parse(url))
+        ..headers.addAll(await _headers(auth: auth));
+      if (body != null) request.body = jsonEncode(body);
+
+      final streamed = await _client
+          .send(request)
           .timeout(AppConstants.requestTimeout);
+      final response = await http.Response.fromStream(streamed);
+      debugPrint(
+          '[API] ← ${response.statusCode} $method $path (${sw.elapsedMilliseconds}ms)');
       return _handleResponse(response);
-    } on SocketException {
+    } on SocketException catch (e) {
+      debugPrint('[API] ✗ $method $path — socket: $e');
       throw const NetworkException();
-    } on HttpException {
-      throw const NetworkException('Connection failed');
+    } on HttpException catch (e) {
+      debugPrint('[API] ✗ $method $path — http: $e');
+      throw const NetworkException('Connection failed. Please try again.');
+    } on TimeoutException {
+      debugPrint(
+          '[API] ✗ $method $path — timed out after ${AppConstants.requestTimeout.inSeconds}s');
+      throw const NetworkException('Request timed out. Please try again.');
     } on ApiException {
       rethrow;
+    } on NetworkException {
+      rethrow;
     } catch (e) {
+      debugPrint('[API] ✗ $method $path — unexpected: $e');
       throw ApiException(e.toString(), 0);
     }
   }
+
+  static Future<dynamic> get(String path) => _send('GET', path);
 
   static Future<dynamic> post(
     String path, {
     Map<String, dynamic>? body,
     bool auth = true,
-  }) async {
-    try {
-      final response = await http
-          .post(
-            Uri.parse('${AppConstants.baseUrl}$path'),
-            headers: await _headers(auth: auth),
-            body: body != null ? jsonEncode(body) : null,
-          )
-          .timeout(AppConstants.requestTimeout);
-      return _handleResponse(response);
-    } on SocketException {
-      throw const NetworkException();
-    } on HttpException {
-      throw const NetworkException('Connection failed');
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(e.toString(), 0);
-    }
-  }
+  }) =>
+      _send('POST', path, body: body, auth: auth);
 
   static Future<dynamic> patch(
     String path, {
     Map<String, dynamic>? body,
-  }) async {
-    try {
-      final response = await http
-          .patch(
-            Uri.parse('${AppConstants.baseUrl}$path'),
-            headers: await _headers(),
-            body: body != null ? jsonEncode(body) : null,
-          )
-          .timeout(AppConstants.requestTimeout);
-      return _handleResponse(response);
-    } on SocketException {
-      throw const NetworkException();
-    } on HttpException {
-      throw const NetworkException('Connection failed');
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(e.toString(), 0);
-    }
-  }
+  }) =>
+      _send('PATCH', path, body: body);
 
-  // ─── Auth ────────────────────────────────────────────────────────────
+  static Future<dynamic> delete(
+    String path, {
+    Map<String, dynamic>? body,
+  }) =>
+      _send('DELETE', path, body: body);
+
+  // ── Auth ─────────────────────────────────────────────────────────────────
 
   static Future<LoginResponse> login(
     String email,
@@ -165,11 +155,7 @@ class ApiService {
   ) async {
     final body = await post(
       '/auth/login',
-      body: {
-        'email': email,
-        'password': password,
-        'device_name': deviceName,
-      },
+      body: {'email': email, 'password': password, 'device_name': deviceName},
       auth: false,
     );
     final result = LoginResponse.fromJson(body);
@@ -189,7 +175,7 @@ class ApiService {
     return WaiterUser.fromJson(body['user']);
   }
 
-  // ─── Reference data ───────────────────────────────────────────────────
+  // ── Reference data ────────────────────────────────────────────────────────
 
   static Future<List<RestaurantTable>> getTables() async {
     final body = await get('/tables');
@@ -227,7 +213,7 @@ class ApiService {
     return RestaurantSettings.fromJson(body);
   }
 
-  // ─── Orders ───────────────────────────────────────────────────────────
+  // ── Orders ────────────────────────────────────────────────────────────────
 
   static Future<PaginatedOrders> getOrders({
     String? status,
@@ -262,17 +248,17 @@ class ApiService {
     String? note,
     required List<Map<String, dynamic>> items,
   }) async {
-    final Map<String, dynamic> requestBody = {'items': items};
-    if (tableId != null) requestBody['table_id'] = tableId;
+    final payload = <String, dynamic>{'items': items};
+    if (tableId != null) payload['table_id'] = tableId;
     if (customerName != null && customerName.isNotEmpty) {
-      requestBody['customer_name'] = customerName;
+      payload['customer_name'] = customerName;
     }
     if (customerPhone != null && customerPhone.isNotEmpty) {
-      requestBody['customer_phone'] = customerPhone;
+      payload['customer_phone'] = customerPhone;
     }
-    if (note != null && note.isNotEmpty) requestBody['note'] = note;
+    if (note != null && note.isNotEmpty) payload['note'] = note;
 
-    final body = await post('/orders', body: requestBody);
+    final body = await post('/orders', body: payload);
     return Order.fromJson(body);
   }
 
@@ -305,7 +291,7 @@ class ApiService {
     return Order.fromJson(body);
   }
 
-  // ─── Print jobs ────────────────────────────────────────────────────────
+  // ── Print jobs ────────────────────────────────────────────────────────────
 
   static Future<void> retryPrintJob(int jobId) async {
     await post('/print-jobs/$jobId/retry');

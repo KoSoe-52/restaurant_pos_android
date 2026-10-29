@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+
+import '../../core/errors/exceptions.dart';
 import '../models/category_model.dart';
 import '../models/product_model.dart';
 import '../services/api_service.dart';
@@ -12,8 +16,13 @@ class MenuProvider extends ChangeNotifier {
   int? _selectedCategoryId;
   String _searchQuery = '';
 
+  // Debounce timer for search — avoids hitting the API on every keystroke.
+  Timer? _searchDebounce;
+
   // Cart state
   final Map<int, CartItem> _cartItems = {};
+
+  // ── Getters ────────────────────────────────────────────────────────────
 
   List<ProductCategory> get categories => _categories;
   List<Product> get products => _products;
@@ -32,6 +41,8 @@ class MenuProvider extends ChangeNotifier {
       _cartItems.values.fold(0, (sum, item) => sum + item.subtotal);
   bool get hasCartItems => _cartItems.isNotEmpty;
 
+  // ── Data loading ───────────────────────────────────────────────────────
+
   Future<void> loadCategories() async {
     _isLoadingCategories = true;
     _error = null;
@@ -39,7 +50,7 @@ class MenuProvider extends ChangeNotifier {
     try {
       _categories = await ApiService.getCategories();
     } catch (e) {
-      _error = _extractMessage(e);
+      _error = AppException.userMessage(e);
     } finally {
       _isLoadingCategories = false;
       notifyListeners();
@@ -47,9 +58,7 @@ class MenuProvider extends ChangeNotifier {
   }
 
   Future<void> loadProducts({bool refresh = false}) async {
-    if (refresh) {
-      _products = [];
-    }
+    if (refresh) _products = [];
     _isLoadingProducts = true;
     _error = null;
     notifyListeners();
@@ -60,30 +69,49 @@ class MenuProvider extends ChangeNotifier {
       );
       _products = result.data;
     } catch (e) {
-      _error = _extractMessage(e);
+      _error = AppException.userMessage(e);
     } finally {
       _isLoadingProducts = false;
       notifyListeners();
     }
   }
 
+  /// Resets search query and category selection, then reloads products.
+  /// Call this when entering the menu screen to clear stale singleton state.
+  void resetFilters() {
+    _searchDebounce?.cancel();
+    _searchQuery = '';
+    _selectedCategoryId = null;
+    _error = null;
+    notifyListeners();
+  }
+
   void selectCategory(int? categoryId) {
     if (_selectedCategoryId == categoryId) return;
+    _searchDebounce?.cancel();
     _selectedCategoryId = categoryId;
     loadProducts(refresh: true);
   }
 
+  /// Updates the search query with a 400 ms debounce so the API is only
+  /// called after the user stops typing.
   void setSearch(String query) {
     _searchQuery = query;
-    loadProducts(refresh: true);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      loadProducts(refresh: true);
+    });
+    notifyListeners(); // update clear-button visibility immediately
   }
 
   void clearSearch() {
+    _searchDebounce?.cancel();
     _searchQuery = '';
     loadProducts(refresh: true);
   }
 
-  // Cart operations
+  // ── Cart operations ────────────────────────────────────────────────────
+
   void addToCart(Product product) {
     if (_cartItems.containsKey(product.id)) {
       _cartItems[product.id]!.quantity++;
@@ -94,14 +122,14 @@ class MenuProvider extends ChangeNotifier {
   }
 
   void removeFromCart(int productId) {
-    if (_cartItems.containsKey(productId)) {
-      if (_cartItems[productId]!.quantity > 1) {
-        _cartItems[productId]!.quantity--;
-      } else {
-        _cartItems.remove(productId);
-      }
-      notifyListeners();
+    final item = _cartItems[productId];
+    if (item == null) return;
+    if (item.quantity > 1) {
+      item.quantity--;
+    } else {
+      _cartItems.remove(productId);
     }
+    notifyListeners();
   }
 
   void removeItemCompletely(int productId) {
@@ -110,10 +138,8 @@ class MenuProvider extends ChangeNotifier {
   }
 
   void updateItemNote(int productId, String note) {
-    if (_cartItems.containsKey(productId)) {
-      _cartItems[productId]!.note = note;
-      notifyListeners();
-    }
+    _cartItems[productId]?.note = note;
+    notifyListeners();
   }
 
   void clearCart() {
@@ -121,23 +147,15 @@ class MenuProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  int getQuantityInCart(int productId) {
-    return _cartItems[productId]?.quantity ?? 0;
-  }
+  int getQuantityInCart(int productId) =>
+      _cartItems[productId]?.quantity ?? 0;
 
-  List<Map<String, dynamic>> getCartAsOrderItems() {
-    return _cartItems.values.map((item) => item.toOrderItem()).toList();
-  }
+  List<Map<String, dynamic>> getCartAsOrderItems() =>
+      _cartItems.values.map((item) => item.toOrderItem()).toList();
 
-  String _extractMessage(dynamic e) {
-    final s = e.toString();
-    if (s.contains('NetworkException')) return 'No internet connection.';
-    if (s.contains('UnauthorizedException')) return 'Session expired.';
-    return s
-        .replaceAll('Exception: ', '')
-        .replaceAll('ApiException(', '')
-        .split('):')
-        .last
-        .trim();
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
   }
 }
