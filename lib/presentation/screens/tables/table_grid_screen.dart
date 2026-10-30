@@ -416,6 +416,7 @@ class _TableCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      isScrollControlled: true,
       builder: (ctx) => _TableOptionsSheet(
         table: table,
         order: table.activeOrder!,
@@ -435,6 +436,7 @@ class _TableOptionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currency = context.read<AuthProvider>().settings.currencySymbol;
+    final isOpen   = order.status == 'open';
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -447,6 +449,7 @@ class _TableOptionsSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             children: [
               Container(
@@ -540,11 +543,555 @@ class _TableOptionsSheet extends StatelessWidget {
               );
             },
           ),
+          // Transfer table — only visible when order status is 'open'
+          if (isOpen) ...[
+            const SizedBox(height: 10),
+            _OptionTile(
+              icon: Icons.compare_arrows_rounded,
+              label: 'Transfer Table',
+              subtitle: 'Move order to another table',
+              color: const Color(0xFF7C3AED), // violet-700
+              onTap: () {
+                Navigator.of(context).pop();
+                _showTransferTableSheet(context);
+              },
+            ),
+          ],
         ],
       ),
     );
   }
+
+  void _showTransferTableSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _TransferTableSheet(
+        sourceTable: table,
+        orderId: order.id,
+      ),
+    );
+  }
 }
+
+// ─── Transfer Table Sheet ────────────────────────────────────────────────────
+
+class _TransferTableSheet extends StatefulWidget {
+  final RestaurantTable sourceTable;
+  final int orderId;
+
+  const _TransferTableSheet({
+    required this.sourceTable,
+    required this.orderId,
+  });
+
+  @override
+  State<_TransferTableSheet> createState() => _TransferTableSheetState();
+}
+
+class _TransferTableSheetState extends State<_TransferTableSheet> {
+  RestaurantTable? _selectedTable;
+  bool _isConfirmStep = false;
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tableProvider = context.watch<TableProvider>();
+
+    // Filter: not source, not disabled, no active order
+    final availableTargets = tableProvider.tables
+        .where((t) =>
+            t.id != widget.sourceTable.id &&
+            t.status != 'disabled' &&
+            t.activeOrder == null)
+        .toList();
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          0,
+          0,
+          0,
+          MediaQuery.paddingOf(context).bottom,
+        ),
+        child: _isConfirmStep
+            ? _buildConfirmStep(context)
+            : _buildSelectStep(context, availableTargets),
+      ),
+    );
+  }
+
+  Widget _buildSelectStep(
+    BuildContext context,
+    List<RestaurantTable> availableTargets,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.compare_arrows_rounded,
+                  color: Color(0xFF7C3AED),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Transfer Table',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'From: ${widget.sourceTable.name}  ·  Select destination',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        // Table grid
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: availableTargets.isEmpty
+              ? _buildEmptyTargets(context)
+              : _buildTargetGrid(context, availableTargets),
+        ),
+        // Footer
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _selectedTable == null
+                      ? null
+                      : () => setState(() => _isConfirmStep = true),
+                  child: const Text('Next'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyTargets(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(
+        children: [
+          Icon(
+            Icons.table_restaurant_outlined,
+            size: 48,
+            color: AppColors.textSecondary.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'No available tables',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'All other tables are occupied or disabled.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTargetGrid(
+    BuildContext context,
+    List<RestaurantTable> targets,
+  ) {
+    final Map<String, List<RestaurantTable>> grouped = {};
+    for (final t in targets) {
+      grouped.putIfAbsent(t.location ?? 'Main', () => []).add(t);
+    }
+    final locations = grouped.keys.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final loc in locations) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              loc,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: grouped[loc]!.map((t) => _buildTableChip(t)).toList(),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTableChip(RestaurantTable t) {
+    final isSelected = _selectedTable?.id == t.id;
+    final statusColor = AppTheme.tableStatusColor(t.status);
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedTable = t),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF7C3AED).withValues(alpha: 0.1)
+              : Colors.white,
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF7C3AED)
+                : statusColor.withValues(alpha: 0.4),
+            width: isSelected ? 2 : 1.5,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected)
+              const Padding(
+                padding: EdgeInsets.only(right: 6),
+                child: Icon(
+                  Icons.check_circle,
+                  size: 14,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+            Icon(
+              Icons.table_restaurant,
+              size: 14,
+              color: isSelected ? const Color(0xFF7C3AED) : statusColor,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              t.name,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? const Color(0xFF7C3AED) : AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmStep(BuildContext context) {
+    final target = _selectedTable!;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.swap_horiz_rounded,
+                  color: AppColors.warning,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Confirm Transfer',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        // From → To visual
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _tableInfoCard(
+                      label: 'From',
+                      tableName: widget.sourceTable.name,
+                      statusColor: AppColors.occupied,
+                      statusLabel: 'Occupied',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_forward,
+                        color: Color(0xFF7C3AED),
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: _tableInfoCard(
+                      label: 'To',
+                      tableName: target.name,
+                      statusColor: AppTheme.tableStatusColor(target.status),
+                      statusLabel: target.statusLabel,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: AppColors.warning,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'All orders from ${widget.sourceTable.name} will be moved to ${target.name}. This action cannot be undone.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Footer
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () => setState(() => _isConfirmStep = false),
+                  child: const Text('Back'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : () => _doTransfer(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C3AED),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.compare_arrows_rounded, size: 16),
+                            SizedBox(width: 6),
+                            Text('Transfer'),
+                          ],
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tableInfoCard({
+    required String label,
+    required String tableName,
+    required Color statusColor,
+    required String statusLabel,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Icon(Icons.table_restaurant, size: 28, color: statusColor),
+          const SizedBox(height: 6),
+          Text(
+            tableName,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              statusLabel,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _doTransfer(BuildContext context) async {
+    if (_selectedTable == null) return;
+
+    setState(() => _isLoading = true);
+
+    final tableProvider = context.read<TableProvider>();
+    final error = await tableProvider.transferTable(
+      widget.orderId,
+      _selectedTable!.id,
+    );
+
+    if (!context.mounted) return;
+
+    setState(() => _isLoading = false);
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      Navigator.of(context).pop(); // close sheet
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Order transferred from ${widget.sourceTable.name} to ${_selectedTable!.name} successfully.',
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+}
+
+// ─── Option Tile ─────────────────────────────────────────────────────────────
 
 class _OptionTile extends StatelessWidget {
   final IconData icon;

@@ -64,6 +64,18 @@ class TableProvider extends ChangeNotifier {
     _refreshTimer = null;
   }
 
+  /// Transfer an open order from the source table to [targetTableId].
+  /// Returns an error message string on failure, null on success.
+  Future<String?> transferTable(int orderId, int targetTableId) async {
+    try {
+      await ApiService.transferTable(orderId, targetTableId);
+      await refreshTables(); // Sync table statuses after transfer
+      return null;
+    } catch (e) {
+      return AppException.userMessage(e);
+    }
+  }
+
   void clearError() {
     _error = null;
     notifyListeners();

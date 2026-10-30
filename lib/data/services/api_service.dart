@@ -279,6 +279,14 @@ class ApiService {
     await post('/orders/$orderId/void', body: {'void_reason': reason});
   }
 
+  static Future<Order> transferTable(int orderId, int targetTableId) async {
+    final body = await post(
+      '/orders/$orderId/transfer-table',
+      body: {'target_table_id': targetTableId},
+    );
+    return Order.fromJson(body);
+  }
+
   static Future<Order> voidItem(
     int orderId,
     int itemId,
