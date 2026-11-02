@@ -64,7 +64,12 @@ class ApiService {
       case 204:
         return body;
       case 401:
-        throw const UnauthorizedException();
+        // Login failures return "Invalid email or password."; expired
+        // sessions return "Unauthenticated." — only use the server message
+        // when it is meaningful.
+        throw UnauthorizedException(
+          (msg != null && msg != 'Unauthenticated.') ? msg : null,
+        );
       case 403:
         throw ForbiddenException(msg ?? 'Access denied');
       case 404:
@@ -105,6 +110,11 @@ class ApiService {
       debugPrint(
           '[API] ← ${response.statusCode} $method $path (${sw.elapsedMilliseconds}ms)');
       return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      // Web platform: fetch/XHR failures (CORS, DNS, refused) surface here.
+      debugPrint('[API] ✗ $method $path — client: $e');
+      throw const NetworkException(
+          'Cannot reach the server. Please check the connection.');
     } on SocketException catch (e) {
       debugPrint('[API] ✗ $method $path — socket: $e');
       throw const NetworkException();

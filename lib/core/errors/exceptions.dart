@@ -41,8 +41,8 @@ class ApiException extends AppException {
 }
 
 class UnauthorizedException extends ApiException {
-  const UnauthorizedException()
-      : super('Session expired. Please login again.', 401);
+  const UnauthorizedException([String? message])
+      : super(message ?? 'Session expired. Please login again.', 401);
 }
 
 class ForbiddenException extends ApiException {
